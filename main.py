@@ -78,7 +78,7 @@ class RayTracer(mglw.WindowConfig):
         self.spheres = self.ctx.buffer(np.array([0.0, 0.0, 0.0, 0.5 * 0.5, -0.5, 0.0, 0.25, 0.5 * 0.5], dtype="f4"))
         self.planes = self.ctx.buffer(np.array([0.0, 1.0, 0, 0, 0.0, -0.5, 0.0, 0], dtype="f4"))
 
-        cam_pos = np.array([0, 0, -5.0])
+        cam_pos = np.array([0, 0, -3.0])
 
         cam_proj = Matrix44.perspective_projection(90, 1, 1, 2, dtype="f4").inverse
 

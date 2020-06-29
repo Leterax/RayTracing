@@ -78,17 +78,19 @@ bool intersect(const Ray ray, const Plane plane, out HitInfo info) {
             info.distance = t;
             info.position = ray.origin + ray.direction * t;
             info.normal = plane.normal.xyz;
+            info.didHit = true;
 
             // color calculations:
             vec3 dt = info.position - plane.position.xyz;
             vec3 b = cross(plane.normal.xyz, vec3(0.5));
             float alpha = acos(clamp((dot(dt, b))/(length(dt)*length(b)), -1., 1.));
 
-            vec2 pos = abs(floor(vec2(length(dt) * cos(alpha), length(dt) * sin(alpha))));
-            //float patternMask = mod(abs(pos.x) + mod(abs(pos.y), 2.), 2.);
-            //info.color = patternMask * vec4(1.0, 1.0, 1.0, 1.0);
-            //info.color = vec4(mod(pos, 1.), 0., 1.);
-            info.color = vec4(1., 0., mod(pos.y, 2.), 1.);
+            vec2 pos = floor(abs(vec2(length(dt) * cos(alpha), length(dt) * sin(alpha))));
+            //pos -= sign(pos.x) <= 0. ? vec2(1, 0) : vec2(0.);
+            //pos -= sign(pos.y) <= 0. ? vec2(0, 1) : vec2(0.);
+            float patternMask = mod(abs(pos.x) + mod((pos.y), 2.), 2.);
+            info.color = vec4(vec3(patternMask/2.0 + 0.3), 1.0);
+
             return true;
         }
     }
@@ -114,7 +116,8 @@ bool intersect(const Ray ray, const Sphere sphere, out HitInfo info) {
         info.distance = t;
         info.position = ray.origin + ray.direction * t;
         info.normal = (info.position - sphere.info.xyz) / sphere.info.w / sphere.info.w;
-        info.color = vec4(t/5.,t/5.,t/5.,1.);
+        info.color = vec4(t/2.,t/3.,t/4.,1.);
+        info.didHit = true;
         return true;
     }
 
@@ -123,7 +126,8 @@ bool intersect(const Ray ray, const Sphere sphere, out HitInfo info) {
         info.distance = t;
         info.position = ray.origin + ray.direction * t;
         info.normal = (info.position - sphere.info.xyz) / sphere.info.w / sphere.info.w;
-        info.color = vec4(t/5.,t/5.,t/5.,1.);
+        info.color = vec4(t/2.,t/3.,t/4.,1.);
+        info.didHit = true;
         return true;
     }
 
@@ -148,7 +152,6 @@ HitInfo trace(Ray ray) {
 
     for (int i = 0; i < SphereIntersectionObjects.objects.length(); i++) {
         if (intersect(ray, SphereIntersectionObjects.objects[i], info)) {
-            bestHit.didHit = true;
             if (info.distance < bestHit.distance) {
                 bestHit = info;
             }
@@ -156,7 +159,6 @@ HitInfo trace(Ray ray) {
     }
     for (int i = 0; i < PlaneIntersectionObjects.objects.length(); i++) {
         if (intersect(ray, PlaneIntersectionObjects.objects[i], info)) {
-            bestHit.didHit = true;
             if (info.distance < bestHit.distance) {
                 bestHit = info;
             }
