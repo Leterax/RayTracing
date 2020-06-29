@@ -83,14 +83,18 @@ bool intersect(const Ray ray, const Plane plane, out HitInfo info) {
             // color calculations:
             vec3 dt = info.position - plane.position.xyz;
             vec3 b = cross(plane.normal.xyz, vec3(0.5));
-            float alpha = acos(clamp((dot(dt, b))/(length(dt)*length(b)), -1., 1.));
 
-            vec2 pos = floor(abs(vec2(length(dt) * cos(alpha), length(dt) * sin(alpha))));
-            //pos -= sign(pos.x) <= 0. ? vec2(1, 0) : vec2(0.);
-            //pos -= sign(pos.y) <= 0. ? vec2(0, 1) : vec2(0.);
-            float patternMask = mod(abs(pos.x) + mod((pos.y), 2.), 2.);
+            float ln_dt = length(dt);
+            float ln =ln_dt*length(b);
+            float Dot = dot(dt, b)/ln;
+            float Det = dot(plane.normal.xyz, cross(b, dt)/ln);
+            float alpha = atan(Det, Dot);
+
+            vec2 pos = floor(vec2(ln_dt * cos(alpha), ln_dt * sin(alpha)));
+
+
+            float patternMask = mod(pos.x + mod(pos.y, 2.), 2.);
             info.color = vec4(vec3(patternMask/2.0 + 0.3), 1.0);
-
             return true;
         }
     }
@@ -193,7 +197,7 @@ void main(void) {
         pos.x);
     Ray ray = Ray(camera.eye.xyz, dir);
     HitInfo hit = trace(ray);
-    // imageStore(framebuffer, pix, vec4(dir.x, dir.y, 0, 1.));
+
     imageStore(framebuffer, pix, hit.color);
     imageStore(depthbuffer, pix, vec4(hit.distance));
 }

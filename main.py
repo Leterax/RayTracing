@@ -29,7 +29,7 @@ class RayTracer(mglw.WindowConfig):
     window_size = 720, 720
     aspect_ratio = None
     tracing_samples = 2
-    near_far_planes = (0.0, 65536.0)
+    near_far_planes = (0.0, 2 ** 16)
     mipmap_levels = math.floor(math.log2(tracing_samples))
     resizable = False
     clear_color = 51 / 255, 51 / 255, 51 / 255
@@ -71,16 +71,18 @@ class RayTracer(mglw.WindowConfig):
             dtype="f4",
         )
 
-        # self.screen_texture = self.load_texture_2d('test-pattern.png')
         self.screen = quad_fs()
 
         # some example data:
-        self.spheres = self.ctx.buffer(np.array([0.0, 0.0, 0.0, 0.5 * 0.5, -0.5, 0.0, 0.25, 0.5 * 0.5], dtype="f4"))
+        self.spheres = self.ctx.buffer(np.array([0.0, 0.0, 0.0, 0.5 * 0.5, -0.5, 0.0, 0.25, 0.5 * 0.5, 5.0, 1.0, 15, 2], dtype="f4"))
         self.planes = self.ctx.buffer(np.array([0.0, 1.0, 0, 0, 0.0, -0.5, 0.0, 0], dtype="f4"))
 
-        cam_pos = np.array([0, 0, -3.0])
+        cam_pos = np.array([0, 1.0, -5.0])
 
-        cam_proj = Matrix44.perspective_projection(90, 1, 1, 2, dtype="f4").inverse
+        cam_proj = Matrix44.perspective_projection(90, 1, 1, 2, dtype="f4") * Matrix44.look_at(
+            cam_pos, (50., 0, 0), (0, 1, 0)
+        )
+        cam_proj = cam_proj.inverse
 
         ray00 = pyrr.matrix44.apply_to_vector(vec=np.array([-0.5, -0.5, 0, 1], dtype="f4"), mat=cam_proj)
         ray00 /= ray00[-1]
