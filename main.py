@@ -83,11 +83,15 @@ class RayTracer(mglw.WindowConfig):
         self.camera_position = np.array([1, 1, 0], dtype="f4")
         self.camera_direction = np.array([0, 0, 1], dtype="f4")
         self.camera_right = np.cross(self.camera_direction, (0, 1, 0))
-        self.yaw = 0
+        self.yaw = 90
         self.pitch = 0
         self.pressed_keys = set()
         self.mouse_sensitivity = 0.5
         self.speed = 0.01
+
+        self.camera_enabled = False
+
+        self.mouse_position_event(0, 0, 0, 0)
 
         # some example data:
         self.spheres = self.ctx.buffer(
@@ -146,7 +150,8 @@ class RayTracer(mglw.WindowConfig):
 
     def render(self, time: float, frame_time: float) -> None:
         # move the camera
-        self.update_camera()
+        if self.camera_enabled:
+            self.update_camera()
 
         # bind camera
         self._camera.bind_to_uniform_block(binding=2)
@@ -186,7 +191,7 @@ class RayTracer(mglw.WindowConfig):
             if keys.DOWN in self.pressed_keys:  # move down
                 self.camera_position += (0, -1 * self.speed, 0)
 
-            self._camera.write(self.camera_creation(self.camera_position, self.camera_position + self.camera_direction))
+        self._camera.write(self.camera_creation(self.camera_position, self.camera_position + self.camera_direction))
 
     def key_event(self, key, action, modifiers):
         keys = self.wnd.keys
@@ -196,11 +201,16 @@ class RayTracer(mglw.WindowConfig):
             if key == keys.F:
                 self.show_depth = not self.show_depth
 
+            if key == keys.C:
+                self.camera_enabled = not self.camera_enabled
+                self.wnd.mouse_exclusivity = self.camera_enabled
+
         if action == keys.ACTION_RELEASE:
             self.pressed_keys.remove(key)
 
     def mouse_position_event(self, x: int, y: int, dx: int, dy: int):
-
+        if not self.camera_enabled:
+            return
         self.yaw += dx * self.mouse_sensitivity
         self.pitch -= dy * self.mouse_sensitivity
         self.camera_direction = np.array(
@@ -211,8 +221,7 @@ class RayTracer(mglw.WindowConfig):
             ],
             dtype="f4",
         )
-        self.camera_right = np.cross(self.camera_direction, (0., 1., 0.))
-        self._camera.write(self.camera_creation(self.camera_position, self.camera_position + self.camera_direction))
+        self.camera_right = np.cross(self.camera_direction, (0.0, 1.0, 0.0))
 
 
 if __name__ == "__main__":
