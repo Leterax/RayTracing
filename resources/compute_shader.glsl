@@ -52,8 +52,9 @@ layout(binding=1, r32f) uniform image2D depthbuffer;
 // Camera ubo
 layout(binding=2, std140) uniform Camera
 {
-  vec4 eye;
-  vec4 ray00, ray01, ray10, ray11;
+    vec4 eye, lower_left_corner, horizontal, vertical, origin;
+    vec4 u,v,w;
+    float lens_radius;
 } camera;
 
 // ssbo's:
@@ -185,16 +186,8 @@ void main(void) {
     if (pix.x >= size.x || pix.y >= size.y) {return;}
     vec2 pos = vec2(pix)/ vec2(size.x, size.y);
 
-    vec3 lower_left_corner = vec3(-1, -1, 1);
-    vec3 horizontal = vec3(2, 0, 0);
-    vec3 vertical = vec3(0, 2, 0);
+    vec3 dir = camera.lower_left_corner.xyz + pos.x*camera.horizontal.xyz+ pos.y*camera.vertical.xyz - camera.eye.xyz;
 
-    vec3 dir = lower_left_corner + pos.x*horizontal+ pos.y*vertical;
-
-    vec3 direction = mix(
-        mix(camera.ray00.xyz, camera.ray01.xyz, pos.y),
-        mix(camera.ray10.xyz, camera.ray11.xyz, pos.y),
-        pos.x);
     Ray ray = Ray(camera.eye.xyz, dir);
     HitInfo hit = trace(ray);
 

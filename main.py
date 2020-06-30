@@ -21,12 +21,16 @@ def next_power_of_two(x):
     return x
 
 
+def normalize(v):
+    return v / np.linalg.norm(v)
+
+
 class RayTracer(mglw.WindowConfig):
     # moderngl_window settings
     gl_version = (4, 3)
     title = "RayTracing demo"
     resource_dir = (Path(__file__) / "../resources").absolute()
-    window_size = 720, 720
+    window_size = 1280, 720
     aspect_ratio = None
     tracing_samples = 2
     near_far_planes = (0.0, 2 ** 16)
@@ -38,6 +42,8 @@ class RayTracer(mglw.WindowConfig):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+
+        self.wnd.mouse_exclusivity = True
 
         self.group_size = next_power_of_two(self.group_size[0]), next_power_of_two(self.group_size[1])
         self.num_work_groups = (
@@ -73,49 +79,77 @@ class RayTracer(mglw.WindowConfig):
 
         self.screen = quad_fs()
 
+        # camera movement
+        self.camera_position = np.array([1, 1, 0], dtype="f4")
+        self.camera_direction = np.array([0, 0, 1], dtype="f4")
+        self.camera_right = np.cross(self.camera_direction, (0, 1, 0))
+        self.yaw = 0
+        self.pitch = 0
+        self.pressed_keys = set()
+        self.mouse_sensitivity = 0.5
+        self.speed = 0.01
+
         # some example data:
-        self.spheres = self.ctx.buffer(np.array([0.0, 0.0, 0.0, 0.5 * 0.5, -0.5, 0.0, 0.25, 0.5 * 0.5, 5.0, 1.0, 15, 2], dtype="f4"))
+        self.spheres = self.ctx.buffer(
+            np.array([[0.0, 0.0, 0.0, 0.5 * 0.5], [-0.5, 0.0, 0.5, 0.5 * 0.5], [5.0, 1.0, 15, 2]], dtype="f4").flatten()
+        )
         self.planes = self.ctx.buffer(np.array([0.0, 1.0, 0, 0, 0.0, -0.5, 0.0, 0], dtype="f4"))
 
-        cam_pos = np.array([0, 1.0, -5.0])
-
-        cam_proj = Matrix44.perspective_projection(90, 1, 1, 2, dtype="f4") * Matrix44.look_at(
-            cam_pos, (50., 0, 0), (0, 1, 0)
+        self._camera = self.ctx.buffer(
+            self.camera_creation(self.camera_position, self.camera_position + self.camera_direction)
         )
-        cam_proj = cam_proj.inverse
-
-        ray00 = pyrr.matrix44.apply_to_vector(vec=np.array([-0.5, -0.5, 0, 1], dtype="f4"), mat=cam_proj)
-        ray00 /= ray00[-1]
-        ray00 = ray00[:-1]
-        ray00 -= cam_pos
-
-        ray10 = pyrr.matrix44.apply_to_vector(vec=np.array([+0.5, -0.5, 0, 1], dtype="f4"), mat=cam_proj)
-        ray10 /= ray00[-1]
-        ray10 = ray10[:-1]
-        ray10 += cam_pos
-
-        ray11 = pyrr.matrix44.apply_to_vector(vec=np.array([+0.5, +0.5, 0, 1], dtype="f4"), mat=cam_proj)
-        ray11 /= ray00[-1]
-        ray11 = ray11[:-1]
-        ray11 += cam_pos
-
-        ray01 = pyrr.matrix44.apply_to_vector(vec=np.array([-0.5, +0.5, 0, 1], dtype="f4"), mat=cam_proj)
-        ray01 /= ray00[-1]
-        ray01 = ray01[:-1]
-        ray01 += cam_pos
-
-        buff_data = np.array(
-            [*cam_pos.tolist(), 0, *ray00.tolist(), 0, *ray01.tolist(), 0, *ray10.tolist(), 0, *ray11.tolist(), 0],
-            dtype="f4",
-        ).flatten()
-        self.camera = self.ctx.buffer(buff_data)
 
         self.show_depth = False
 
+    @staticmethod
+    def camera_creation(eye, center=(0, 0, 0), up=(0, 1, 0), fov=45, aspect=16 / 9, aperture=0.01, focus_distance=1.0):
+        lens_radius = aperture / 2
+        theta = fov * math.pi / 180
+        half_height = math.tan(theta / 2.0)
+        half_width = aspect * half_height
+
+        origin = eye
+        w = normalize(eye - center)
+        u = normalize(np.cross(up, w))
+        v = np.cross(w, u)
+
+        lower_left_corner = (
+            origin - half_width * u * focus_distance - half_height * v * focus_distance - w * focus_distance
+        )
+        horizontal = 2 * half_width * u * focus_distance
+        vertical = 2 * half_height * v * focus_distance
+
+        padding = np.array([0.0])
+
+        return np.concatenate(
+            (
+                eye,
+                padding,
+                lower_left_corner,
+                padding,
+                horizontal,
+                padding,
+                vertical,
+                padding,
+                origin,
+                padding,
+                u,
+                padding,
+                v,
+                padding,
+                w,
+                padding,
+                np.array([lens_radius]),
+            ),
+            axis=0,
+        ).astype("f4")
+
     def render(self, time: float, frame_time: float) -> None:
-        # render the vao
+        # move the camera
+        self.update_camera()
+
         # bind camera
-        self.camera.bind_to_uniform_block(binding=2)
+        self._camera.bind_to_uniform_block(binding=2)
         # bind primitive buffers
         self.spheres.bind_to_storage_buffer(binding=3)
         self.planes.bind_to_storage_buffer(binding=4)
@@ -134,11 +168,51 @@ class RayTracer(mglw.WindowConfig):
             self.screen_texture.use(0)
             self.screen.render(self.view_program)
 
+    def update_camera(self):
+        keys = self.wnd.keys
+        if self.pressed_keys & {keys.A, keys.D, keys.W, keys.S, keys.UP, keys.DOWN}:
+            if keys.A in self.pressed_keys:  # move left
+                self.camera_position += -self.camera_right * self.speed
+            if keys.D in self.pressed_keys:  # move right
+                self.camera_position += self.camera_right * self.speed
+
+            if keys.W in self.pressed_keys:  # move forward
+                self.camera_position += self.camera_direction * self.speed
+            if keys.S in self.pressed_keys:  # move back
+                self.camera_position += -self.camera_direction * self.speed
+
+            if keys.UP in self.pressed_keys:  # move up
+                self.camera_position += (0, 1 * self.speed, 0)
+            if keys.DOWN in self.pressed_keys:  # move down
+                self.camera_position += (0, -1 * self.speed, 0)
+
+            self._camera.write(self.camera_creation(self.camera_position, self.camera_position + self.camera_direction))
+
     def key_event(self, key, action, modifiers):
         keys = self.wnd.keys
         if action == keys.ACTION_PRESS:
+            self.pressed_keys.add(key)
+
             if key == keys.F:
                 self.show_depth = not self.show_depth
+
+        if action == keys.ACTION_RELEASE:
+            self.pressed_keys.remove(key)
+
+    def mouse_position_event(self, x: int, y: int, dx: int, dy: int):
+
+        self.yaw += dx * self.mouse_sensitivity
+        self.pitch -= dy * self.mouse_sensitivity
+        self.camera_direction = np.array(
+            [
+                math.cos(math.radians(self.yaw)) * math.cos(math.radians(self.pitch)),
+                math.sin(math.radians(self.pitch)),
+                math.sin(math.radians(self.yaw)) * math.cos(math.radians(self.pitch)),
+            ],
+            dtype="f4",
+        )
+        self.camera_right = np.cross(self.camera_direction, (0., 1., 0.))
+        self._camera.write(self.camera_creation(self.camera_position, self.camera_position + self.camera_direction))
 
 
 if __name__ == "__main__":
