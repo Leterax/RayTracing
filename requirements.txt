@@ -1,6 +1,6 @@
 moderngl==5.6.1
 moderngl-window==2.2.2
 numpy==1.19.0
-Pillow==7.1.2
+Pillow==9.0.0
 pyglet==1.5.7
 pyrr==0.10.3
